@@ -10,31 +10,22 @@ library(viridis)
 library(dplyr)
 library(rnoaa)
 library(modelr)
+library(purrr)
 
 knitr::opts_chunk$set(
 	echo = TRUE,
 	warning = FALSE,
-	fig.width = 8, 
+	fig.width = 10, 
   fig.height = 6,
   out.width = "90%"
 )
-
-options(
-  ggplot2.continuous.colour = "viridis",
-  ggplot2.continuous.fill = "viridis"
-)
-
-scale_colour_discrete = scale_colour_viridis_d
-scale_fill_discrete = scale_fill_viridis_d
-
-theme_set(theme_minimal() + theme(legend.position = "bottom"))
 ```
 
 
 
 ## Problem 1 with Given Code - NOAA
 
-### Data Import
+### *Data Import*
 
 ```{r weather_df, cache = TRUE}
 weather_df = 
@@ -52,7 +43,7 @@ weather_df =
 
 To obtain a distribution for $\hat{r}^2$, we'll follow basically the same procedure we used for regression coefficients: draw bootstrap samples --> fit the a model to each --> extract the value I'm concerned with --> and summarize. Here, we'll use `modelr::bootstrap` to draw 5000 bootstrap samples and `broom::glance` to produce `r.squared` values. 
 
-### Distribution of $\hat{r}^2$ and its 95% CI
+### *Distribution of $\hat{r}^2$ and its 95% CI*
 
 ```{r}
 weather_r2_df = 
@@ -122,7 +113,7 @@ The point of this is not to say you should always use the bootstrap -- it's poss
 
 ## Problem 2 - Homicides in US Cities
 
-### Data Import and Cleanning
+### *Data Import and Cleanning*
 
 In the following code chunk, I did:
 
@@ -132,31 +123,87 @@ In the following code chunk, I did:
 * Omitting people who is not White or Black
 * Changing `victim_age` into numeric variable. "NA" is assignied automatically for unknown ages
 
-```{r warning=FALSE}
+```{r}
 homicide_df = 
   read_csv("data/homicide-data.csv") %>%
   janitor::clean_names() %>% 
   mutate(city_state = str_c(city, state, sep = ","),
          solve_status = ifelse(disposition == "Closed by arrest", 1, 0)) %>% 
-  relocate(city_state, solve_status) %>% 
   filter(city_state != "Dallas,TX" 
          & city_state != "Phoenix,AZ" 
          & city_state != "Kansas City,MO"
          & city_state != "Tulsa,AL") %>% 
   filter(victim_race == "White" | victim_race == "Black") %>% 
-  mutate(victim_age = as.numeric(victim_age))
+  mutate(victim_age = as.numeric(victim_age)) %>%
+  select(city_state, solve_status, victim_race, victim_age, victim_sex)
 ```
 
 
+### *Fit Logistic Regression via `glm` in Baltimore,MD*
+
+Using the `glm` function with the `family=binomial()` specified to account for the non-Gaussian outcome distribution.
+
+In the follwing code, I fitted a logistic regression and obtained the estimate and confidence interval of the adjusted odds ratio for solving homicides comparing male victims to female victims keeping all other variables fixed.
+
+```{r}
+baltimore_df = 
+  homicide_df %>% 
+  filter(city_state == "Baltimore,MD")
+
+fit_logistic = 
+  baltimore_df %>% 
+  glm(solve_status ~ victim_age + victim_sex + victim_race, data = ., family = binomial()) %>% 
+  broom::tidy() %>% 
+  mutate(OR = exp(estimate),
+         CI_95_low = exp(estimate - (1.96 * std.error)),
+         CI_95_up = exp(estimate + (1.96 * std.error))) %>%
+  select(term, OR, CI_95_low, CI_95_up) %>% 
+  filter(term == "victim_sexMale") %>% 
+  knitr::kable(digits = 3)
+```
 
 
+### *Fit Logistic Regression via `glm` in all cities*
+
+Now run `glm` for each of the cities in your dataset, and extract the adjusted odds ratio (and CI) for solving homicides comparing male victims to female victims. Do this within a “tidy” pipeline, making use of purrr::map, list columns, and unnest as necessary to create a dataframe with estimated ORs and CIs for each city.
+
+```{r}
+homicide_nest = nest(homicide_df, data = solve_status:victim_sex) %>% 
+  mutate(
+    models = map(data, ~ glm(solve_status ~ victim_age + victim_sex + victim_race, data = ., family = binomial())),
+    results = map(models, broom::tidy)) %>% 
+  unnest(results) %>% 
+  mutate(OR = exp(estimate),
+         CI_95_low = exp(estimate - (1.96 * std.error)),
+         CI_95_up = exp(estimate + (1.96 * std.error))) %>%
+  select(city_state, term, OR, CI_95_low, CI_95_up)
+
+adj_OR_sex =
+  homicide_nest %>% 
+  filter(term == "victim_sexMale")
+
+adj_OR_sex %>% 
+  knitr::kable(digits = 3)
+```
 
 
+### *Plot of Estimated Adjusted ORs and CIs among Cities*
 
+```{r}
+plot_1 = 
+  adj_OR_sex %>% 
+  mutate(city_state = fct_reorder(city_state, OR)) %>% 
+  ggplot(aes(x = city_state, y = OR)) + 
+  geom_point() + 
+  geom_point(data = adj_OR_sex, mapping = (aes(x = city_state, y = CI_95_low, color = "blue"))) +
+  geom_point(data = adj_OR_sex, mapping = (aes(x = city_state, y = CI_95_up, color = "red"))) +
+  theme(axis.text.x = element_text(angle = 80, hjust = 1)) +
+  scale_color_manual(values = c("blue", "red"),
+                     labels = c("95% CI lower bound",
+                                "95% CI upper bound"))
 
-
-
-
+plot_1
+```
 
 
 
