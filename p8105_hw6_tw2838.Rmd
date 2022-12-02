@@ -122,6 +122,31 @@ The point of this is not to say you should always use the bootstrap -- it's poss
 
 ## Problem 2 - Homicides in US Cities
 
+### Data Import and Cleanning
+
+In the following code chunk, I did:
+
+* Creating a `city_state` variable with combine the information form `city` and `state`, eg. Baltimore, MD
+* Creating a binary variable that indicates whether the homicide is solved (0 = unsolved; 1 = solved)
+* Omitting cities "Dallas, TX," "Phoenix, AZ," "Kansas City, MO," and "Tulsa, AL." Their data is not complete or correct.
+* Omitting people who is not White or Black
+* Changing `victim_age` into numeric variable. "NA" is assignied automatically for unknown ages
+
+```{r warning=FALSE}
+homicide_df = 
+  read_csv("data/homicide-data.csv") %>%
+  janitor::clean_names() %>% 
+  mutate(city_state = str_c(city, state, sep = ","),
+         solve_status = ifelse(disposition == "Closed by arrest", 1, 0)) %>% 
+  relocate(city_state, solve_status) %>% 
+  filter(city_state != "Dallas,TX" 
+         & city_state != "Phoenix,AZ" 
+         & city_state != "Kansas City,MO"
+         & city_state != "Tulsa,AL") %>% 
+  filter(victim_race == "White" | victim_race == "Black") %>% 
+  mutate(victim_age = as.numeric(victim_age))
+```
+
 
 
 
