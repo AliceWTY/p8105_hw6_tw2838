@@ -209,3 +209,118 @@ plot_1
 
 ## Problem 3 - Child Birthweight
 
+### *Data Import and Cleanning*
+
+```{r}
+bw_df = read_csv("./data/birthweight.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(babysex = ifelse(babysex == 1, "male", "female"),
+         babysex = fct_infreq(babysex),
+         frace = case_when(frace == 1 ~ "White", 
+                           frace == 2 ~ "Black",
+                           frace == 3 ~ "Asian",
+                           frace == 4 ~ "Puerto Rican",
+                           frace == 8 ~ "Other", 
+                           frace == 9 ~ "Unknown"),
+         frace = fct_infreq(frace),
+         mrace = case_when(mrace == 1 ~ "White", 
+                           mrace == 2 ~ "Black",
+                           mrace == 3 ~ "Asian",
+                           mrace == 4 ~ "Puerto Rican",
+                           mrace == 8 ~ "Other"),
+         mrace = fct_infreq(mrace),
+         malform = as.character(malform))
+```
+
+Let's look at missing data in this data set.
+
+```{r}
+miss_df = 
+  bw_df %>% 
+  filter(bhead == 0 | blength == 0 | bwt == 0 | delwt == 0 | fincome == 0 
+         | frace == "Unknown" | gaweeks == 0 | menarche == 0 | mheight == 0
+         | momage == 0 | ppbmi == 0 | ppwt == 0 | wtgain == 0)
+```
+
+There are a total of `r nrow(miss_df)` observations that contain missing data.
+
+To simplify the analysis process, I will just drop these 21 observations since the size of missing data is very small compared to the original data set.
+
+```{r}
+bw_clean_df = anti_join(bw_df, miss_df)
+```
+
+
+
+### *Fit Linear Regression Model*
+
+#### **Explore the relationships: t-test**
+
+First, I will fit all main effects in a linear regression model and run the default t-test to see if the association is significant via `broom::tidy()`.
+
+```{r}
+fit = lm(bwt ~ babysex + bhead + blength + delwt + fincome + frace + gaweeks + malform + menarche + mheight + momage + mrace + parity + pnumlbw + pnumsga + ppbmi + ppwt + smoken + wtgain, data = bw_clean_df)
+
+broom::tidy(fit) %>% 
+knitr::kable(digits = 3)
+```
+
+Based on t-test, at the 5% significance level, `babysex`, `bhead`, `blength`, `delwt`, `gaweeks`, `mrace(Black)`, and `smoken` have significant association with birthweight.
+
+
+Since `mrace` is a categorical variable that have more than 2 levels, I will perform an ANOVA test to test them together.
+
+```{r}
+fit_null = lm(bwt ~ babysex + bhead + blength + delwt + fincome + frace + gaweeks + malform + menarche + mheight + momage + parity + pnumlbw + pnumsga + ppbmi + ppwt + smoken + wtgain, data = bw_clean_df)
+
+fit_alt = lm(bwt ~ babysex + bhead + blength + delwt + fincome + frace + gaweeks + malform + menarche + mheight + momage + mrace + parity + pnumlbw + pnumsga + ppbmi + ppwt + smoken + wtgain, data = bw_clean_df)
+
+anova(fit_null, fit_alt) %>% 
+  pull("Pr(>F)")
+```
+
+Since the Pr(>F) = `r anova(fit_null, fit_alt) %>% pull("Pr(>F)")` < 0.05, there is evidence to show that there a significant association between `mrace` and birthweight.
+
+
+#### **Visualization**
+
+Visualize relationships between birthweight and some variables, including `babysex`, `bhead`, `blength`, `delwt`, `gaweeks`, `mrace`, and `smoken`, through correlation and boxplots.
+
+
+##### *Correlation for Continuous Variable*
+
+```{r}
+library("PerformanceAnalytics")
+```
+
+Checking correlation among `bwt`, `bhead`, `blength`, `delwt`, `gaweeks`, and `smoken`.
+
+```{r}
+corr_df = 
+  bw_clean_df %>% 
+  select(bwt, bhead, blength, delwt, gaweeks, smoken) %>%
+  chart.Correlation(histogram = TRUE)
+```
+
+According to the corr
+
+##### *Boxplot for Categorical Variables*
+
+1. birthweight and babysex
+
+```{r}
+bw_clean_df %>% 
+  ggplot(aes(x = babysex, y = bwt)) +
+  geom_boxplot()
+```
+
+2. birthweight and mrace
+
+```{r}
+bw_clean_df %>% 
+  ggplot(aes(x = mrace, y = bwt)) +
+  geom_boxplot()
+```
+
+
+Now, I propose the model for birthweight as a linear regression model which have `gaweeks`(gestational age in weeks), `malform` (presence of malformations, 1 = present, 0 = absent), and `wtgain` (mother's weight gain during pregnancy) as predicting variables. 
