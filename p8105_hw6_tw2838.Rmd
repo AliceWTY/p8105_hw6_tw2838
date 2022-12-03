@@ -160,6 +160,8 @@ fit_logistic =
   select(term, OR, CI_95_low, CI_95_up) %>% 
   filter(term == "victim_sexMale") %>% 
   knitr::kable(digits = 3)
+
+fit_logistic
 ```
 
 
@@ -189,7 +191,7 @@ adj_OR_sex %>%
 
 ### *Plot of Estimated Adjusted ORs and CIs among Cities*
 
-```{r width=5, heigh=15}
+```{r fig.width=12, fig.height=6}
 plot_1 = 
   adj_OR_sex %>% 
   mutate(city_state = fct_reorder(city_state, OR)) %>% 
@@ -207,7 +209,7 @@ plot_1
 
 
 
-## Problem 3 - Child Birthweight
+## Problem 3 - Child Birth Weight
 
 ### *Data Import and Cleanning*
 
